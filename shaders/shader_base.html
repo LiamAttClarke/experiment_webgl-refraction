@@ -1,0 +1,11 @@
+<div id="vertex-shader">
+	void main() {
+		precision mediump float;
+		gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+	}
+</div>
+<div id="fragment-shader">
+	void main() {
+		gl_FragColor = vec4(1.0, 0, 0.0, 1.0);
+	}
+</div>

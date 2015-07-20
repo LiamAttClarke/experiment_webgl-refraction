@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>WebGL</title>
+	<style>
+		body { margin: 0; }
+	</style>
+</head>
+<body>
+	<div id="vertex-shader">
+		void main() {
+			precision mediump float;
+			gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+		}
+	</div>
+	<div id="fragment-shader">
+		void main() {
+			gl_FragColor = vec4(1.0, 0, 0.0, 1.0);
+		}
+	</div>
+</body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r71/three.min.js"></script>
+<script>
+	var scene = new THREE.Scene();
+	var camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+	var renderer = new THREE.WebGLRenderer();
+	
+	
+	renderer.setSize( window.innerWidth, window.innerHeight );
+	document.body.appendChild( renderer.domElement );
+	
+	// Create cube
+	var geometry = new THREE.BoxGeometry( 1, 1, 1 );
+	var material = new THREE.ShaderMaterial({
+		vertexShader: document.getElementById("vertex-shader").textContent,
+		fragmentShader: document.getElementById("fragment-shader").textContent
+	});
+	var cube = new THREE.Mesh( geometry, material );
+	scene.add( cube );
+	
+	camera.position.z = 5;
+	
+	// Render loop
+	function render() {
+		requestAnimationFrame( render );
+		renderer.render( scene, camera );
+		cube.rotation.y += 0.01;
+		cube.rotation.x += 0.01;
+	}
+	render();
+	
+</script>
+</html>
