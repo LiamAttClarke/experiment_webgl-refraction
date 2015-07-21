@@ -2,21 +2,52 @@
 <html lang="en">
 <head>
 	<meta charset="UTF-8">
-	<title>WebGL</title>
+	<title>Shader Test</title>
 	<style>
 		body { margin: 0; }
+		.dont-render { display: none; }
 	</style>
 </head>
 <body>
-	<div id="vertex-shader">
+	<div id="vertex-shader" class="dont-render">
+		uniform float uTime;
+		uniform float uSinTime;
+		uniform float uTextureRepeat;
+		//varying vec2 vUV;
+		varying vec3 vWorldSpaceNormal;
+		varying vec3 vWorldSpacePosition;
 		void main() {
 			precision mediump float;
 			gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+			//vUV = uv * uTextureRepeat;
+			vWorldSpaceNormal = normalize(modelMatrix * vec4(normal, 1.0)).xyz;
+			vWorldSpacePosition = (modelMatrix * vec4(position, 1.0)).xyz;
 		}
 	</div>
-	<div id="fragment-shader">
+	<div id="fragment-shader" class="dont-render">
+		uniform vec3 uColor;
+		uniform sampler2D uTexture;
+		uniform samplerCube uTextureCube;
+		uniform float uETA;
+		uniform vec3 uDirLightPos;
+		uniform vec3 uViewDir;
+		uniform float uDiffuseIntensity;
+		uniform float uRimWidth;
+		uniform float uRimIntensity;
+		uniform float uPower;
+		//varying vec2 vUV;
+		varying vec3 vWorldSpaceNormal;
+		varying vec3 vWorldSpacePosition;
 		void main() {
-			gl_FragColor = vec4(1.0, 0, 0.0, 1.0);
+			float diffuseLight = uDiffuseIntensity * max(0.0, dot(vWorldSpaceNormal, normalize(uDirLightPos)));
+			float rimLight = uRimIntensity * smoothstep(1.0 - uRimWidth, 1.0, 1.0 - max(0.0, dot(vWorldSpaceNormal, -uViewDir)));
+			float finalLight = diffuseLight + rimLight;
+			
+			vec3 eye2Frag = normalize( vWorldSpacePosition - cameraPosition );
+			vec4 reflection = textureCube( uTextureCube, reflect(eye2Frag, vWorldSpaceNormal) );
+			vec4 refraction = textureCube( uTextureCube, refract(eye2Frag, vWorldSpaceNormal, uETA) );
+			float R =  0.1 + 0.25 * pow( 1.0 + dot( eye2Frag, vWorldSpaceNormal ), uPower );
+			gl_FragColor = vec4( mix( refraction, reflection, R ).rgb * uColor * finalLight, 1.0 );
 		}
 	</div>
 </body>
@@ -25,28 +56,92 @@
 	var scene = new THREE.Scene();
 	var camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
 	var renderer = new THREE.WebGLRenderer();
-	
-	
 	renderer.setSize( window.innerWidth, window.innerHeight );
 	document.body.appendChild( renderer.domElement );
 	
+	// View dir
+	var viewDir = new THREE.Vector3(0, 0, -1.0).transformDirection(camera.matrixWorld);
+	
+	// Directional Light
+	var directionalLight = new THREE.DirectionalLight( 0xffffff, 1.0 );
+	directionalLight.position.set(0.6, 0.6, 0.6);
+	scene.add( directionalLight );
+	
+	// Skybox
+	var urlPrefix = "assets/skyboxes/green-field/";
+	var cubeFaces = [
+		urlPrefix + "3.png",
+		urlPrefix + "1.png",
+		urlPrefix + "top.png",
+		urlPrefix + "bottom.png",
+		urlPrefix + "2.png",
+		urlPrefix + "4.png"
+	];
+	var textureCube = new THREE.ImageUtils.loadTextureCube(cubeFaces);
+	var shader = THREE.ShaderLib[ "cube" ];
+	shader.uniforms[ "tCube" ].value = textureCube;
+	var skyGeometry = new THREE.BoxGeometry(96, 96, 96);
+	var skyMaterial = new THREE.ShaderMaterial( {
+	    fragmentShader: shader.fragmentShader,
+	    vertexShader: shader.vertexShader,
+	    uniforms: shader.uniforms,
+	    depthWrite: false,
+	    side: THREE.BackSide
+	} );
+	var skyBox = new THREE.Mesh( skyGeometry, skyMaterial );
+	scene.add( skyBox );
+	
+	// material uniforms
+	var texture = THREE.ImageUtils.loadTexture("assets/textures/Checker.png");
+	texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+	texture.repeat.set(4, 4);
+	var materialUniforms = {
+		uColor: { type: "c", value: new THREE.Color( 0.95, 1.0, 1.0 ) },
+		uTexture: { type: "t", value: texture },
+		uTextureRepeat: { type: "f", value: 4.0 },
+		uTextureCube: { type: "t", value: textureCube },
+		uETA: { type: "f", value: 0.96 },
+		uPower: { type: "f", value: 5.25 },
+		uTime: { type: "f", value: 0.0 },
+		uSinTime: { type: "f", value: 1.0 },
+		uDirLightPos: { type: "v3", value: directionalLight.position },
+		uViewDir: { type: "v3", value: viewDir },
+		uDiffuseIntensity: { type: "f", value: directionalLight.intensity + 0.5 },
+		uRimWidth: { type: "f", value: 1.0 },
+		uRimIntensity: { type: "f", value: 1.0 }
+	};
+	
 	// Create cube
-	var geometry = new THREE.BoxGeometry( 1, 1, 1 );
+	var geometry = new THREE.TorusGeometry( 2, 1, 16, 100 );
+	//var geometry = new THREE.TorusKnotGeometry( 10, 3, 100, 16 );
+	//var geometry = new THREE.BoxGeometry( 1.0, 1.0, 1.0 );
+	//var geometry = new THREE.SphereGeometry( 2, 32, 32 );
 	var material = new THREE.ShaderMaterial({
+		uniforms: materialUniforms,
 		vertexShader: document.getElementById("vertex-shader").textContent,
 		fragmentShader: document.getElementById("fragment-shader").textContent
 	});
-	var cube = new THREE.Mesh( geometry, material );
-	scene.add( cube );
+	var obj = new THREE.Mesh( geometry, material );
+	scene.add( obj );
 	
-	camera.position.z = 5;
+	var clock;
 	
-	// Render loop
+	// initialization
+	function start() {
+		clock = new THREE.Clock(true);
+		camera.position.z = 8.0;
+	}
+	start();
+	
+	// Render/ update loop
 	function render() {
 		requestAnimationFrame( render );
 		renderer.render( scene, camera );
-		cube.rotation.y += 0.01;
-		cube.rotation.x += 0.01;
+		materialUniforms.uTime.value = clock.getElapsedTime();
+		materialUniforms.uSinTime.value = Math.sin(clock.getElapsedTime());
+		obj.rotation.x += 0.01;
+		obj.rotation.y += 0.01;
+		obj.rotation.z -= 0.01;
 	}
 	render();
 	
